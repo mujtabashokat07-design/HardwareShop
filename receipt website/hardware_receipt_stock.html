@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Professional Hardware Shop System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #1c92d2, #f2fcfe);
+      padding: 20px;
+      color: #333;
+    }
+    h1 { text-align: center; color: #1c92d2; margin-bottom: 30px; }
+    .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; margin: auto; }
+    .box { background: #fff; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+    .box h2 { margin-top: 0; color: #1c92d2; }
+    input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 10px; font-size: 14px; }
+    button { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; margin-top: 5px; transition: 0.3s; }
+    .btn { background: #1c92d2; color: #fff; }
+    .btn:hover { background: #0f6abf; }
+    .deleteBtn { background: #e74c3c; }
+    .deleteBtn:hover { background: #c0392b; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+    th, td { padding: 10px; border-bottom: 1px solid #ddd; text-align: center; }
+    th { background: #1c92d2; color: #fff; }
+    tr:hover { background: #f1f1f1; }
+    .full { grid-column: 1 / -1; }
+
+    @media print {
+      body * { visibility: hidden; }
+      #receiptPrint, #receiptPrint * { visibility: visible; }
+      #receiptPrint { position: absolute; top: 0; left: 0; width: 100%; font-family: monospace; font-size: 14px; }
+      #receiptContent { white-space: pre; border-left: 2px solid #000; border-right: 2px solid #000; padding: 10px 5px; }
+    }
+    @media(max-width: 768px) { .container { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<h1>Professional Hardware Shop System</h1>
+
+<div class="container">
+  <div class="box">
+    <h2>Add Stock</h2>
+    <input type="text" id="itemName" placeholder="Item Name">
+    <input type="number" id="itemPrice" placeholder="Price">
+    <input type="number" id="itemQty" placeholder="Quantity">
+    <button class="btn" onclick="addStock()">Add Stock</button>
+  </div>
+
+  <div class="box">
+    <h2>Sell Item</h2>
+    <input list="stockList" id="sellItem" placeholder="Select Item">
+    <datalist id="stockList"></datalist>
+    <input type="text" id="customerName" placeholder="Customer Name">
+    <input type="number" id="sellQty" placeholder="Quantity">
+    <button class="btn" onclick="sellItem()">Add to Receipt</button>
+  </div>
+
+  <div class="box full">
+    <h2>Current Stock</h2>
+    <table id="stockTable">
+      <tr><th>Item</th><th>Price</th><th>Quantity</th><th>Action</th></tr>
+    </table>
+  </div>
+
+  <div class="box full">
+    <h2>Receipt</h2>
+    <div id="receiptPrint">
+      <pre id="receiptContent"></pre>
+    </div>
+    <button class="btn" onclick="printReceipt()">Print Receipt</button>
+  </div>
+</div>
+
+<script>
+  let stock = JSON.parse(localStorage.getItem('stock')) || [];
+  let receipt = [];
+
+  const sellItemInput = document.getElementById('sellItem');
+  const stockList = document.getElementById('stockList');
+  const receiptContent = document.getElementById('receiptContent');
+
+  function saveStock() { localStorage.setItem('stock', JSON.stringify(stock)); }
+
+  function renderStock(){
+    let table = document.getElementById('stockTable');
+    table.innerHTML = '<tr><th>Item</th><th>Price</th><th>Quantity</th><th>Action</th></tr>';
+    stockList.innerHTML = '';
+    stock.forEach(item => {
+      let row = `<tr>
+                   <td>${item.name}</td>
+                   <td>${item.price}</td>
+                   <td>${item.qty}</td>
+                   <td><button class='deleteBtn' onclick="deleteItem('${item.name}')">Delete</button></td>
+                 </tr>`;
+      table.innerHTML += row;
+      if(item.qty > 0){
+        let option = document.createElement('option');
+        option.value = item.name;
+        stockList.appendChild(option);
+      }
+    });
+  }
+
+  function addStock(){
+    let name = document.getElementById('itemName').value;
+    let price = parseFloat(document.getElementById('itemPrice').value);
+    let qty = parseInt(document.getElementById('itemQty').value);
+    if(name && price && qty){
+      let existing = stock.find(i => i.name.toLowerCase() === name.toLowerCase());
+      if(existing){ existing.qty += qty; } else { stock.push({name, price, qty}); }
+      saveStock(); renderStock();
+      document.getElementById('itemName').value='';
+      document.getElementById('itemPrice').value='';
+      document.getElementById('itemQty').value='';
+    } else { alert('Please fill all fields'); }
+  }
+
+  function deleteItem(name){ stock = stock.filter(i=>i.name!==name); saveStock(); renderStock(); }
+
+  function sellItem(){
+    let name = sellItemInput.value;
+    let qty = parseInt(document.getElementById('sellQty').value);
+    let customer = document.getElementById('customerName').value || 'Guest';
+    let item = stock.find(i=>i.name===name);
+    if(item && qty>0 && qty<=item.qty){
+      let total = item.price*qty;
+      receipt.push({name, qty, price:item.price, total});
+      item.qty -= qty;
+      saveStock(); renderStock(); renderReceipt(customer);
+      sellItemInput.value='';
+      document.getElementById('sellQty').value='';
+      document.getElementById('customerName').value='';
+    } else { alert('Invalid item or quantity'); }
+  }
+
+  function renderReceipt(customer){
+    let now = new Date();
+    let billNo = now.getTime();
+    let dateStr = now.toISOString().slice(0,19).replace('T',' ');
+    let content = '';
+    content += '------------------- Hardware Shop -------------------\n';
+    content += 'Address: 123 Main Street, City, State 12345\n';
+    content += 'Phone: (123) 456-7890 | GST No: 22AAAAA0000A1Z5\n';
+    content += '-----------------------------------------------------\n';
+    content += `Invoice No: ${billNo}\nDate: ${dateStr}\nCustomer: ${customer}\n`;
+    content += '-----------------------------------------------------\n';
+    content += '| Item                 Qty  Price    Total |\n';
+    content += '-----------------------------------------------------\n';
+    let subtotal=0;
+    receipt.forEach(r=>{content+=`${r.name.padEnd(20)} ${String(r.qty).padEnd(4)} ${r.price.toFixed(2).padEnd(7)} ${r.total.toFixed(2).padEnd(7)}\n`; subtotal+=r.total;});
+    content+='-----------------------------------------------------\n';
+    content+=`Subtotal: ${subtotal.toFixed(2)}\nTotal:    ${subtotal.toFixed(2)}\n`; content+='-----------------------------------------------------\n';
+    content+='Thank you for your business!\nPlease visit again!\n';
+    receiptContent.textContent=content;
+  }
+
+  function printReceipt(){ window.print(); }
+
+  renderStock();
+</script>
+
+</body>
+</html>
